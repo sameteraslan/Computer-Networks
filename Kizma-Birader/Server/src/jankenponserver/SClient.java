@@ -79,7 +79,7 @@ public class SClient {
                     Message received = (Message) (TheClient.sInput.readObject());
                     //mesaj gelirse bu satıra geçer
                     //mesaj tipine göre işlemlere ayır
-                    System.out.println("Mesaj:" + received.content.toString());
+                    //System.out.println("Mesaj:" + received.content.toString());
                     switch (received.type) {
                         case Name:
                             TheClient.name = received.content.toString();
@@ -89,7 +89,11 @@ public class SClient {
                         case Disconnect:
                             break;
                         case Dice:
-                            System.out.println("Server'a mesaj geldi " + received.content);
+                            //3 parametreli
+                            //System.out.println("Server'a Dice mesajı geldi: " + (int)received.content);
+                            Server.Send(TheClient.rival, received);
+                            break;
+                        case Turn:
                             Server.Send(TheClient.rival, received);
                             break;
                         case Text:
@@ -101,6 +105,7 @@ public class SClient {
                             Server.Send(TheClient.rival, received);
                             break;
                         case Bitis:
+                            Server.Send(TheClient.rival, received);
                             break;
 
                     }

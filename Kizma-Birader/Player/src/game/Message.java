@@ -5,23 +5,33 @@
  */
 package game;
 
-
 /**
  *
  * @author INSECT
  */
-
 public class Message implements java.io.Serializable {
-    public static enum Message_Type {None, Name, Disconnect,RivalConnected, Text, Selected, Bitis,Start,Dice,Turn}
-    
+
+    public static enum Message_Type {
+        None, Name, Disconnect, RivalConnected, Text, Selected, Bitis, Start, Dice, Turn
+    }
+
     public Message_Type type;
     public Object content;
-    public Message(Message_Type t)
-    {
-        this.type=t;
+    public int pionNumber, pionIndex;
+    public int pionType;
+    public boolean pion_arrived;
+    
+    public Message(Message_Type t) {
+        this.type = t;
     }
- 
 
-    
-    
+    public Message(Message_Type t, Pion[] p) {
+        this.type = t;
+    }
+
+    public Message(Message_Type t, Pion p, int index) {
+        this.type = t;
+        this.content = index;
+    }
+
 }

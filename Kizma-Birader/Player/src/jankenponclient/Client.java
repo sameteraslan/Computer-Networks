@@ -6,7 +6,10 @@
 package jankenponclient;
 
 import game.GUI;
+import static game.GUI.btn_dice;
+import static game.GUI.lbl_end_text;
 import game.Message;
+import game.Pion;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -35,19 +38,26 @@ class Listen extends Thread {
                         break;
                     case RivalConnected:
                         String name = received.content.toString();
+                        
                         System.out.println("baglandi");
                         GUI.ThisGame.tmr_slider.start();
                         break;
                     case Disconnect:
                         break;
                     case Dice:
-                        GUI.ThisGame.rivalDice = received.content + "";
-                        GUI.ThisGame.lblplayer2.setText(received.content + "");
-                        GUI.ThisGame.btn_dice.setEnabled(true);
+                        //GUI.ThisGame.rivalDice = received.content + "";
+                        //GUI.ThisGame.lblplayer2.setText(received.content + "");
+                        GUI.rival_pion_list[received.pionNumber] = new Pion(received.pionType, received.pionIndex, received.pionNumber, received.pion_arrived);
+                        GUI.ThisGame.checkIntersections();
+                        System.out.println("pion index " + GUI.rival_pion_list[0].pionIndex);
+                        System.out.println("pion number " + GUI.rival_pion_list[0].pionNumber);
+                        
+                        //GUI.ThisGame.updateRivalPions();
+                        GUI.ThisGame.updateMap();
                         GUI.ThisGame.updateRival = true;
                         break;
                     case Turn:
-                        GUI.ThisGame.turn = Integer.parseInt(received.content + "");
+                        GUI.btn_dice.setEnabled(true);
                     case Text:
                         //GUI.ThisGame.txt_receive.setText(received.content.toString());
                         break;
@@ -57,6 +67,10 @@ class Listen extends Thread {
                         break;
 
                     case Bitis:
+                        GUI.btn_dice.setEnabled(false);
+                        GUI.lbl_end_text.setIcon(new javax.swing.ImageIcon(getClass().getResource("/images/kaybettin.png")));
+                        GUI.lbl_end_text.setVisible(true);
+                        Client.Stop();
                         break;
 
                 }
@@ -102,7 +116,7 @@ public class Client {
             
             //ilk mesaj olarak isim gönderiyorum
             Message msg = new Message(Message.Message_Type.Name);
-            msg.content = "asd";
+            msg.content = GUI.txt_name.getText();
             Client.Send(msg);
         } catch (IOException ex) {
             Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
