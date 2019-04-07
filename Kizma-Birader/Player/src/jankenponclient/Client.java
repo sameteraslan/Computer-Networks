@@ -58,6 +58,7 @@ class Listen extends Thread {
                         break;
                     case Turn:
                         GUI.btn_dice.setEnabled(true);
+                        //GUI.lbl_ingame_name.setText(GUI.txt_name.getText());
                     case Text:
                         //GUI.ThisGame.txt_receive.setText(received.content.toString());
                         break;

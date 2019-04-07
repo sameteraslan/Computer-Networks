@@ -13,7 +13,10 @@ import javax.swing.JFrame;
 import javax.swing.JPanel;
 import jankenponclient.Client;
 import java.awt.Button;
+import java.awt.Color;
 import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.Font;
 import java.awt.List;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
@@ -26,6 +29,9 @@ import javax.swing.JOptionPane;
  */
 public class GUI extends javax.swing.JFrame {
 
+    /*
+    * Bu sınıfta piyon animasyonları yapılmaktadır.
+    */
     public class PionAnimationThread implements Runnable {
 
         int pionNumber, src, dst;
@@ -40,15 +46,110 @@ public class GUI extends javax.swing.JFrame {
         public void run() {
             for (int i = 1; i <= dst; i++) {
 
-                updateCoordinates(pionNumber, src, i);
+                updateCoordinates(pionNumber, src, 1);
                 try {
-                    Thread.sleep(1000);
+                    Thread.sleep(300);
                 } catch (InterruptedException ex) {
                     Logger.getLogger(GUI.class.getName()).log(Level.SEVERE, null, ex);
                 }
                 src = src + 1;
+                updateMap();
+
+            }
+            try {
+                Thread.currentThread().join(10);
+            } catch (InterruptedException ex) {
+                Logger.getLogger(GUI.class.getName()).log(Level.SEVERE, null, ex);
+            }
+            
+            Message m = new Message(Message.Message_Type.Dice);
+            m.pionType = pionList[pionNumber].pionType;
+            m.pionIndex = pionList[pionNumber].pionIndex;
+            m.pionNumber = pionNumber;
+            m.pion_arrived = pionList[pionNumber].pion_arrived;
+            Client.Send(m);
+            checkWinner();
+        }
+    }
+
+    /*
+    * Bu sınıfta zar animasyonu yapılmaktadır.
+    */
+    public class DiceAnimation implements Runnable {
+
+        int number;
+
+        public DiceAnimation(int number) {
+            this.number = number;
+        }
+
+        @Override
+        public void run() {
+            for (int i = 0; i < number; i++) {
+                lbl_dice.setIcon(new javax.swing.ImageIcon(getClass().getResource(dicePaths[i])));
+                try {
+                    Thread.sleep(400);
+                } catch (InterruptedException ex) {
+                    Logger.getLogger(GUI.class.getName()).log(Level.SEVERE, null, ex);
+                }
+            }
+            int notAvailablePionCount = checkAvailableCoordinates(number);
+            lblplayer1.setText(number + "");
+            //txt_dice.setText("" + number);
+
+            String dialogResult = "";
+            if (pionCount - finished_pions_count == 1 && number != 6) {
+                updateMyPion(pionCount - 1, pionList[pionCount - 1].pionIndex, number);
+            } else if (pionCount != 4 && number == 6) {
+                selectPionDialogMessage = new String[pionCount - finished_pions_count + 1 - notAvailablePionCount];
+                selectPionDialogMessage[0] = "New Pion";
+                for (int i = 1 + finished_pions_count; i <= pionCount - notAvailablePionCount; i++) {
+                    if (availablePions[i - 1]) {
+                        selectPionDialogMessage[i - finished_pions_count] = i + ". Pion";
+                    }
+                }
+                dialogResult = (String) JOptionPane.showInputDialog(ThisGame,
+                        "Choose an action",
+                        "Action",
+                        JOptionPane.QUESTION_MESSAGE,
+                        null,
+                        selectPionDialogMessage,
+                        selectPionDialogMessage[0]);
+                updateSelection(dialogResult, number);
+            } else if (pionCount - finished_pions_count == 0 && number != 6) {
+                //nothing to do
+            } else {
+                selectPionDialogMessage = new String[pionCount - finished_pions_count - notAvailablePionCount];
+                for (int i = finished_pions_count; i < pionCount - notAvailablePionCount; i++) {
+                    if (availablePions[i - finished_pions_count]) {
+                        selectPionDialogMessage[i - finished_pions_count] = (i + 1) + ". Pion";
+                    }
+                }
+                dialogResult = (String) JOptionPane.showInputDialog(ThisGame,
+                        "Choose an action",
+                        "Action",
+                        JOptionPane.QUESTION_MESSAGE,
+                        null,
+                        selectPionDialogMessage,
+                        selectPionDialogMessage[0]);
+                updateSelection(dialogResult, number);
+            }
+            if (number != 6) {
+                btn_dice.setEnabled(false);
+                Message m = new Message(Message.Message_Type.Turn);
+                Client.Send(m);
+            }
+            if (pionCount > 0) {
+                System.out.println(pionList[0].pionIndex);
+
+            }
+            try {
+                Thread.currentThread().join(10);
+            } catch (InterruptedException ex) {
+                Logger.getLogger(GUI.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
+
     }
 
     /**
@@ -63,8 +164,9 @@ public class GUI extends javax.swing.JFrame {
     public static JLabel[][] inital_pions = new JLabel[4][4];
 
     public static Pion[] rival_pion_list = {null, null, null, null};
-    public static boolean[] checkAvaiblePions = new boolean[4];
+    public static boolean[] availablePions = new boolean[4];
     public static String[] colorPaths = new String[5];
+    public static String[] dicePaths = new String[6];
     public static Pion[] pionList = {null, null, null, null};
     public static String[] selectPionDialogMessage;
     public int pionCount = 0;
@@ -93,26 +195,35 @@ public class GUI extends javax.swing.JFrame {
         initComponents();
         loadAreatoArray();
 
+        //Oyuncu piyon renkleri
         colorPaths[0] = "/images/greenColor.png";
         colorPaths[1] = "/images/blueColor.png";
         colorPaths[2] = "/images/redColor.png";
         colorPaths[3] = "/images/yellowColor.png";
         colorPaths[4] = "/images/salmonColor.png";
+        
+        //Zar resimleri
+        for (int i = 0; i < dicePaths.length; i++) {
+            dicePaths[i] = "/images/dice" + (i + 1) + ".png";
+        }
         ThisGame = this;
-        message = new Message(Message.Message_Type.Text);
-        message.content = "asd";
+ 
         switchPanel(mainPanel);
 
+        //Oyunun başlangıç ekran animasyonu burada gerçekleşiyor.
         tmr_slider = new Thread(() -> {
             try {
                 //
                 lbl_esleme_araniyor.setText("Eşleşme Bulundu");
                 lbl_loading.setText("Oyun Başlıyor!");
                 Thread.sleep(1000);
+                lbl_geri_sayim.setFont(new Font("Serif", Font.PLAIN, 14));
                 lbl_geri_sayim.setText("3");
                 Thread.sleep(1000);
+                lbl_geri_sayim.setFont(new Font("Serif", Font.PLAIN, 16));
                 lbl_geri_sayim.setText("2");
                 Thread.sleep(1000);
+                lbl_geri_sayim.setFont(new Font("Serif", Font.PLAIN, 18));
                 lbl_geri_sayim.setText("1");
                 Thread.sleep(1000);
                 switchPanel(gamePanel);
@@ -145,6 +256,7 @@ public class GUI extends javax.swing.JFrame {
         profileFrame = new javax.swing.JFrame();
         jFrame1 = new javax.swing.JFrame();
         colorButtonGroup = new javax.swing.ButtonGroup();
+        buttonGroup1 = new javax.swing.ButtonGroup();
         jLayeredPane1 = new javax.swing.JLayeredPane();
         gamePanel = new javax.swing.JPanel();
         lbl_end_text = new javax.swing.JLabel();
@@ -232,9 +344,6 @@ public class GUI extends javax.swing.JFrame {
         jLabel97 = new javax.swing.JLabel();
         jLabel98 = new javax.swing.JLabel();
         btn_dice = new javax.swing.JButton();
-        txt_dice = new javax.swing.JTextField();
-        jLabel21 = new javax.swing.JLabel();
-        jLabel22 = new javax.swing.JLabel();
         jLabel23 = new javax.swing.JLabel();
         jLabel24 = new javax.swing.JLabel();
         lblplayer1 = new javax.swing.JLabel();
@@ -243,6 +352,7 @@ public class GUI extends javax.swing.JFrame {
         jLabel26 = new javax.swing.JLabel();
         jLabel27 = new javax.swing.JLabel();
         jLabel28 = new javax.swing.JLabel();
+        lbl_dice = new javax.swing.JLabel();
         mainPanel = new javax.swing.JPanel();
         jLabel2 = new javax.swing.JLabel();
         jButton1 = new javax.swing.JButton();
@@ -262,6 +372,13 @@ public class GUI extends javax.swing.JFrame {
         lbl_esleme_araniyor = new javax.swing.JLabel();
         lbl_loading = new javax.swing.JLabel();
         lbl_geri_sayim = new javax.swing.JLabel();
+        settingsPanel = new javax.swing.JPanel();
+        btn_red_bg = new javax.swing.JToggleButton();
+        btn_dark_bg = new javax.swing.JToggleButton();
+        btn_blue_bg = new javax.swing.JToggleButton();
+        btn_white_bg = new javax.swing.JToggleButton();
+        btn_menu = new javax.swing.JButton();
+        jLabel22 = new javax.swing.JLabel();
 
         javax.swing.GroupLayout profileFrameLayout = new javax.swing.GroupLayout(profileFrame.getContentPane());
         profileFrame.getContentPane().setLayout(profileFrameLayout);
@@ -293,7 +410,7 @@ public class GUI extends javax.swing.JFrame {
         lbl_end_text.setFont(new java.awt.Font("Tahoma", 0, 48)); // NOI18N
         lbl_end_text.setForeground(new java.awt.Color(51, 255, 51));
         lbl_end_text.setEnabled(false);
-        gamePanel.add(lbl_end_text, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 170, 520, 200));
+        gamePanel.add(lbl_end_text, new org.netbeans.lib.awtextra.AbsoluteConstraints(50, -90, 520, 200));
 
         jLabel5.setBackground(new java.awt.Color(37, 81, 238));
         jLabel5.setIcon(new javax.swing.ImageIcon(getClass().getResource("/images/blueColor.png"))); // NOI18N
@@ -717,20 +834,7 @@ public class GUI extends javax.swing.JFrame {
                 btn_diceActionPerformed(evt);
             }
         });
-        gamePanel.add(btn_dice, new org.netbeans.lib.awtextra.AbsoluteConstraints(238, 216, 80, 40));
-
-        txt_dice.setBackground(new java.awt.Color(140, 225, 245));
-        txt_dice.setFont(new java.awt.Font("Franklin Gothic Medium", 0, 48)); // NOI18N
-        txt_dice.setText("0");
-        gamePanel.add(txt_dice, new org.netbeans.lib.awtextra.AbsoluteConstraints(262, 265, -1, 47));
-
-        jLabel21.setFont(new java.awt.Font("Tahoma", 0, 18)); // NOI18N
-        jLabel21.setText("Turn:");
-        gamePanel.add(jLabel21, new org.netbeans.lib.awtextra.AbsoluteConstraints(220, 530, -1, -1));
-
-        jLabel22.setFont(new java.awt.Font("Tahoma", 0, 18)); // NOI18N
-        jLabel22.setText("Name");
-        gamePanel.add(jLabel22, new org.netbeans.lib.awtextra.AbsoluteConstraints(270, 530, 57, 23));
+        gamePanel.add(btn_dice, new org.netbeans.lib.awtextra.AbsoluteConstraints(220, 280, 110, 50));
 
         jLabel23.setText("You:");
         gamePanel.add(jLabel23, new org.netbeans.lib.awtextra.AbsoluteConstraints(590, 120, -1, -1));
@@ -760,6 +864,9 @@ public class GUI extends javax.swing.JFrame {
         jLabel28.setText("←");
         gamePanel.add(jLabel28, new org.netbeans.lib.awtextra.AbsoluteConstraints(500, 350, 50, 50));
 
+        lbl_dice.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
+        gamePanel.add(lbl_dice, new org.netbeans.lib.awtextra.AbsoluteConstraints(250, 210, 64, 64));
+
         jLayeredPane1.add(gamePanel, "card3");
 
         jLabel2.setFont(new java.awt.Font("Franklin Gothic Medium", 1, 36)); // NOI18N
@@ -787,23 +894,31 @@ public class GUI extends javax.swing.JFrame {
         jButton3.setBackground(new java.awt.Color(255, 160, 70));
         jButton3.setFont(new java.awt.Font("Franklin Gothic Medium", 0, 14)); // NOI18N
         jButton3.setText("Settings");
+        jButton3.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jButton3ActionPerformed(evt);
+            }
+        });
 
         javax.swing.GroupLayout mainPanelLayout = new javax.swing.GroupLayout(mainPanel);
         mainPanel.setLayout(mainPanelLayout);
         mainPanelLayout.setHorizontalGroup(
             mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(mainPanelLayout.createSequentialGroup()
-                .addGap(160, 160, 160)
-                .addComponent(jLabel2))
-            .addGroup(mainPanelLayout.createSequentialGroup()
-                .addGap(220, 220, 220)
-                .addComponent(jButton1, javax.swing.GroupLayout.PREFERRED_SIZE, 123, javax.swing.GroupLayout.PREFERRED_SIZE))
-            .addGroup(mainPanelLayout.createSequentialGroup()
-                .addGap(220, 220, 220)
-                .addComponent(jButton2, javax.swing.GroupLayout.PREFERRED_SIZE, 123, javax.swing.GroupLayout.PREFERRED_SIZE))
-            .addGroup(mainPanelLayout.createSequentialGroup()
-                .addGap(220, 220, 220)
-                .addComponent(jButton3, javax.swing.GroupLayout.PREFERRED_SIZE, 123, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addGroup(mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(mainPanelLayout.createSequentialGroup()
+                        .addGap(160, 160, 160)
+                        .addComponent(jLabel2))
+                    .addGroup(mainPanelLayout.createSequentialGroup()
+                        .addGap(220, 220, 220)
+                        .addComponent(jButton1, javax.swing.GroupLayout.PREFERRED_SIZE, 123, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addGroup(mainPanelLayout.createSequentialGroup()
+                        .addGap(220, 220, 220)
+                        .addComponent(jButton2, javax.swing.GroupLayout.PREFERRED_SIZE, 123, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addGroup(mainPanelLayout.createSequentialGroup()
+                        .addGap(220, 220, 220)
+                        .addComponent(jButton3, javax.swing.GroupLayout.PREFERRED_SIZE, 123, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                .addGap(169, 169, 169))
         );
         mainPanelLayout.setVerticalGroup(
             mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -815,7 +930,8 @@ public class GUI extends javax.swing.JFrame {
                 .addGap(20, 20, 20)
                 .addComponent(jButton2, javax.swing.GroupLayout.PREFERRED_SIZE, 50, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addGap(20, 20, 20)
-                .addComponent(jButton3, javax.swing.GroupLayout.PREFERRED_SIZE, 51, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addComponent(jButton3, javax.swing.GroupLayout.PREFERRED_SIZE, 51, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addContainerGap(189, Short.MAX_VALUE))
         );
 
         jLayeredPane1.add(mainPanel, "card11");
@@ -942,27 +1058,25 @@ public class GUI extends javax.swing.JFrame {
         jLayeredPane1.add(profilePanel, "card2");
 
         lbl_esleme_araniyor.setFont(new java.awt.Font("Tahoma", 0, 36)); // NOI18N
-        lbl_esleme_araniyor.setText("Esleme Araniyor");
+        lbl_esleme_araniyor.setText("Eşleşme Araniyor");
 
+        lbl_loading.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
         lbl_loading.setText("Loading");
 
         lbl_geri_sayim.setFont(new java.awt.Font("Tahoma", 0, 24)); // NOI18N
+        lbl_geri_sayim.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
 
         javax.swing.GroupLayout matchingPanelLayout = new javax.swing.GroupLayout(matchingPanel);
         matchingPanel.setLayout(matchingPanelLayout);
         matchingPanelLayout.setHorizontalGroup(
             matchingPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(matchingPanelLayout.createSequentialGroup()
-                .addGroup(matchingPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(matchingPanelLayout.createSequentialGroup()
-                        .addGap(150, 150, 150)
-                        .addComponent(lbl_esleme_araniyor))
-                    .addGroup(matchingPanelLayout.createSequentialGroup()
-                        .addGap(267, 267, 267)
-                        .addGroup(matchingPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(lbl_loading)
-                            .addComponent(lbl_geri_sayim, javax.swing.GroupLayout.PREFERRED_SIZE, 52, javax.swing.GroupLayout.PREFERRED_SIZE))))
-                .addContainerGap(166, Short.MAX_VALUE))
+                .addGap(150, 150, 150)
+                .addGroup(matchingPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                    .addComponent(lbl_loading, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(lbl_esleme_araniyor, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(lbl_geri_sayim, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                .addContainerGap(150, Short.MAX_VALUE))
         );
         matchingPanelLayout.setVerticalGroup(
             matchingPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -977,6 +1091,70 @@ public class GUI extends javax.swing.JFrame {
         );
 
         jLayeredPane1.add(matchingPanel, "card5");
+
+        settingsPanel.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
+
+        btn_red_bg.setBackground(new java.awt.Color(255, 153, 153));
+        buttonGroup1.add(btn_red_bg);
+        btn_red_bg.setFont(new java.awt.Font("Tahoma", 0, 24)); // NOI18N
+        btn_red_bg.setText("Red");
+        btn_red_bg.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btn_red_bgActionPerformed(evt);
+            }
+        });
+        settingsPanel.add(btn_red_bg, new org.netbeans.lib.awtextra.AbsoluteConstraints(270, 150, 160, 60));
+
+        btn_dark_bg.setBackground(new java.awt.Color(102, 102, 102));
+        buttonGroup1.add(btn_dark_bg);
+        btn_dark_bg.setFont(new java.awt.Font("Tahoma", 0, 24)); // NOI18N
+        btn_dark_bg.setText("Dark");
+        btn_dark_bg.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btn_dark_bgActionPerformed(evt);
+            }
+        });
+        settingsPanel.add(btn_dark_bg, new org.netbeans.lib.awtextra.AbsoluteConstraints(110, 150, 160, 60));
+
+        btn_blue_bg.setBackground(new java.awt.Color(102, 153, 255));
+        buttonGroup1.add(btn_blue_bg);
+        btn_blue_bg.setFont(new java.awt.Font("Tahoma", 0, 24)); // NOI18N
+        btn_blue_bg.setText("Blue");
+        btn_blue_bg.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btn_blue_bgActionPerformed(evt);
+            }
+        });
+        settingsPanel.add(btn_blue_bg, new org.netbeans.lib.awtextra.AbsoluteConstraints(270, 220, 160, 60));
+
+        btn_white_bg.setBackground(new java.awt.Color(255, 255, 255));
+        buttonGroup1.add(btn_white_bg);
+        btn_white_bg.setFont(new java.awt.Font("Tahoma", 0, 24)); // NOI18N
+        btn_white_bg.setText("White");
+        btn_white_bg.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btn_white_bgActionPerformed(evt);
+            }
+        });
+        settingsPanel.add(btn_white_bg, new org.netbeans.lib.awtextra.AbsoluteConstraints(110, 220, 160, 60));
+
+        btn_menu.setBackground(new java.awt.Color(255, 153, 0));
+        btn_menu.setFont(new java.awt.Font("Tahoma", 0, 24)); // NOI18N
+        btn_menu.setText("Main Menu");
+        btn_menu.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btn_menuActionPerformed(evt);
+            }
+        });
+        settingsPanel.add(btn_menu, new org.netbeans.lib.awtextra.AbsoluteConstraints(200, 330, -1, 50));
+
+        jLabel22.setFont(new java.awt.Font("Tahoma", 0, 36)); // NOI18N
+        jLabel22.setForeground(new java.awt.Color(255, 153, 51));
+        jLabel22.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
+        jLabel22.setText("Background Color");
+        settingsPanel.add(jLabel22, new org.netbeans.lib.awtextra.AbsoluteConstraints(110, 50, 320, -1));
+
+        jLayeredPane1.add(settingsPanel, "card6");
 
         getContentPane().add(jLayeredPane1, new org.netbeans.lib.awtextra.AbsoluteConstraints(0, 0, -1, -1));
 
@@ -1002,57 +1180,11 @@ public class GUI extends javax.swing.JFrame {
     }//GEN-LAST:event_jButton2ActionPerformed
 
     private void btn_diceActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btn_diceActionPerformed
+        //Rastgele bir sayı oluşturuluyor ve zar animasyonu başlatılıyor.
         int number = (int) (Math.random() * 6 + 1);
-        int availablePionCount = checkAvailableCoordinates(number);
-        lblplayer1.setText(number + "");
-        txt_dice.setText("" + number);
-
-        String dialogResult = "";
-        if (pionCount - finished_pions_count == 1 && number != 6) {
-            updateMyPion(pionCount - 1, pionList[pionCount - 1].pionIndex, number);
-        } else if (pionCount != 4 && number == 6) {
-            selectPionDialogMessage = new String[pionCount - finished_pions_count + 1];
-            selectPionDialogMessage[0] = "New Pion";
-            for (int i = 1 + finished_pions_count; i <= pionCount; i++) {
-                if (checkAvaiblePions[i - 1]) {
-                    selectPionDialogMessage[i - finished_pions_count] = i + ". Pion";
-                }
-            }
-            dialogResult = (String) JOptionPane.showInputDialog(this,
-                    "Choose an action",
-                    "Action",
-                    JOptionPane.QUESTION_MESSAGE,
-                    null,
-                    selectPionDialogMessage,
-                    selectPionDialogMessage[0]);
-            updateSelection(dialogResult, number);
-        } else if (pionCount - finished_pions_count == 0 && number != 6) {
-            //nothing to do
-        } else {
-            selectPionDialogMessage = new String[pionCount - finished_pions_count];
-            for (int i = finished_pions_count; i < pionCount; i++) {
-                if (checkAvaiblePions[i - finished_pions_count]) {
-                    selectPionDialogMessage[i - finished_pions_count] = (i + 1) + ". Pion";
-                }
-            }
-            dialogResult = (String) JOptionPane.showInputDialog(this,
-                    "Choose an action",
-                    "Action",
-                    JOptionPane.QUESTION_MESSAGE,
-                    null,
-                    selectPionDialogMessage,
-                    selectPionDialogMessage[0]);
-            updateSelection(dialogResult, number);
-        }
-        if (number != 6) {
-            btn_dice.setEnabled(false);
-            Message m = new Message(Message.Message_Type.Turn);
-            Client.Send(m);
-        }
-        if (pionCount > 0) {
-            System.out.println(pionList[0].pionIndex);
-
-        }
+        DiceAnimation diceAnimation = new DiceAnimation(number);
+        Thread thread = new Thread(diceAnimation);
+        thread.start();
 
     }//GEN-LAST:event_btn_diceActionPerformed
 
@@ -1075,6 +1207,30 @@ public class GUI extends javax.swing.JFrame {
     private void jToggleButton4ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jToggleButton4ActionPerformed
         color = color.Yellow;
     }//GEN-LAST:event_jToggleButton4ActionPerformed
+
+    private void btn_menuActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btn_menuActionPerformed
+       switchPanel(mainPanel);
+    }//GEN-LAST:event_btn_menuActionPerformed
+
+    private void jButton3ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton3ActionPerformed
+        switchPanel(settingsPanel);
+    }//GEN-LAST:event_jButton3ActionPerformed
+
+    private void btn_dark_bgActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btn_dark_bgActionPerformed
+        this.getContentPane().setBackground(Color.DARK_GRAY);
+    }//GEN-LAST:event_btn_dark_bgActionPerformed
+
+    private void btn_red_bgActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btn_red_bgActionPerformed
+        this.getContentPane().setBackground(Color.RED);
+    }//GEN-LAST:event_btn_red_bgActionPerformed
+
+    private void btn_white_bgActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btn_white_bgActionPerformed
+       this.getContentPane().setBackground(Color.WHITE);
+    }//GEN-LAST:event_btn_white_bgActionPerformed
+
+    private void btn_blue_bgActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btn_blue_bgActionPerformed
+        this.getContentPane().setBackground(Color.blue);
+    }//GEN-LAST:event_btn_blue_bgActionPerformed
 
     /**
      * @param args the command line arguments
@@ -1111,7 +1267,12 @@ public class GUI extends javax.swing.JFrame {
             }
         });
     }
-
+    
+    /*
+    * Oyun içinde eğer yeni piyon oluturulacaksa veya birden
+    * fazla piyon olduğunda oynanması istenilen piyon için
+    * gösterien seçenek ekranının sonucu bu metot ile değerlendiriliyor.
+    */
     private void updateSelection(String s, int number) {
         switch (s) {
             case "New Pion":
@@ -1141,6 +1302,10 @@ public class GUI extends javax.swing.JFrame {
         }
     }
 
+    /*
+    * Oyun başlarken ekrandaki label bileşenleri
+    * bu metot ile bir diziye atılıyor.
+    */
     private void loadAreatoArray() {
         area[0] = lbl01;
         area[1] = lbl02;
@@ -1212,27 +1377,34 @@ public class GUI extends javax.swing.JFrame {
         finish_area[3][3] = jLabel88;
     }
 
+    /*
+    * Oyuncu kendi piyonun olduğu hücreye başka bir piyon
+    * koyamaz. Bu kontrolu sağlayan metot
+    */
     private int checkAvailableCoordinates(int number) {
-        checkAvaiblePions[0] = true;
-        checkAvaiblePions[1] = true;
-        checkAvaiblePions[2] = true;
-        checkAvaiblePions[3] = true;
+        availablePions[0] = true;
+        availablePions[1] = true;
+        availablePions[2] = true;
+        availablePions[3] = true;
         for (int i = 0; i < pionCount; i++) {
             for (int j = 0; j < pionCount; j++) {
-                if (pionList[i].pionIndex == pionList[j].pionIndex + number) {
-                    checkAvaiblePions[i] = false;
+                if (pionList[i].pionIndex + number == pionList[j].pionIndex) {
+                    availablePions[i] = false;
                 }
             }
         }
         int sayac = 0;
         for (int i = 0; i < pionCount; i++) {
-            if (checkAvaiblePions[i]) {
+            if (!availablePions[i]) {
                 sayac++;
             }
         }
         return sayac;
     }
 
+    /*
+    * Rakibin piyonlarının konumunu güncelleyen metot
+    */
     public void updateRivalPions() {
         for (Pion p : rival_pion_list) {
             System.out.println("rival updating");
@@ -1243,6 +1415,9 @@ public class GUI extends javax.swing.JFrame {
         }
     }
 
+    /*
+    * Oyuncunun piyonlarının koordinatlarını düzelten metot.
+    */
     public void updateMyPions() {
         for (Pion p : pionList) {
             if (p != null && !p.pion_arrived) {
@@ -1251,6 +1426,9 @@ public class GUI extends javax.swing.JFrame {
         }
     }
 
+    /*
+    * Piyonların hareket ettiği bölgeyi güncelleyen metot.
+    */
     public void updateMap() {
         for (JLabel area1 : area) {
             area1.setIcon(new javax.swing.ImageIcon(getClass().getResource(colorPaths[4])));
@@ -1259,7 +1437,11 @@ public class GUI extends javax.swing.JFrame {
         updateRivalPions();
         updateFinishedArea();
     }
-    
+
+    /*
+    * Piyon hamlesinden sonra oyunun kazanılıp kazanılmadığını 
+    * kontrol eden metot.
+    */
     private void checkWinner() {
         int counter = 0;
         for (Pion pionList1 : pionList) {
@@ -1276,29 +1458,34 @@ public class GUI extends javax.swing.JFrame {
             Client.Stop();
         }
     }
-    
+
+    /*
+    * Bitis bölgesini güncellyen metot.
+    */
     private void updateFinishedArea() {
         for (int i = 0; i < finish_area.length; i++) {
             if (pionList[i] != null && pionList[i].pion_arrived) {
-                finish_area[pionList[i].pionType][i].setIcon(new javax.swing.ImageIcon(getClass().getResource(colorPaths[pionList[i].pionType])));   
+                finish_area[pionList[i].pionType][i].setIcon(new javax.swing.ImageIcon(getClass().getResource(colorPaths[pionList[i].pionType])));
             }
             if (rival_pion_list[i] != null && rival_pion_list[i].pion_arrived) {
-                finish_area[rival_pion_list[i].pionType][i].setIcon(new javax.swing.ImageIcon(getClass().getResource(colorPaths[rival_pion_list[i].pionType])));   
+                finish_area[rival_pion_list[i].pionType][i].setIcon(new javax.swing.ImageIcon(getClass().getResource(colorPaths[rival_pion_list[i].pionType])));
             }
         }
-        
-        
+
     }
 
     //Pion Animations
     private void updateMyPion(int pionNumber, int src, int dst) {
-        //pionAnimation = new PionAnimationThread(pionNumber, src, dst);
-        //new Thread(pionAnimation).start();
-        updateCoordinates(pionNumber, src, dst);
+        pionAnimation = new PionAnimationThread(pionNumber, src, dst);
+        new Thread(pionAnimation).start();
+        //updateCoordinates(pionNumber, src, dst);
         //updateMap();
 
     }
 
+    /*
+    * Rakip piyon ile kesişim olup olmadığının kontrolü
+    */
     public void checkIntersections() {
         for (int i = 0; i < pionList.length; i++) {
             for (int j = i; j < rival_pion_list.length; j++) {
@@ -1327,6 +1514,9 @@ public class GUI extends javax.swing.JFrame {
         updateMap();
     }
 
+    /*
+    * Piyonu ilerleten metot
+    */
     private void updateCoordinates(int pionNumber, int src, int dst) {
         if (Pion.start_finish[pionList[pionNumber].pionType][1] > Pion.start_finish[pionList[pionNumber].pionType][0]) {
             if (src + dst > Pion.start_finish[pionList[pionNumber].pionType][1]) {
@@ -1358,17 +1548,16 @@ public class GUI extends javax.swing.JFrame {
                 area[(src + dst) % 48].setIcon(new javax.swing.ImageIcon(getClass().getResource(colorPaths[pionList[pionNumber].pionType])));
             }
         }
-        Message m = new Message(Message.Message_Type.Dice);
-        m.pionType = pionList[pionNumber].pionType;
-        m.pionIndex = pionList[pionNumber].pionIndex;
-        m.pionNumber = pionNumber;
-        m.pion_arrived = pionList[pionNumber].pion_arrived;
-        Client.Send(m);
-        checkWinner();
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
+    private javax.swing.JToggleButton btn_blue_bg;
+    private javax.swing.JToggleButton btn_dark_bg;
     public static javax.swing.JButton btn_dice;
+    private javax.swing.JButton btn_menu;
+    private javax.swing.JToggleButton btn_red_bg;
+    private javax.swing.JToggleButton btn_white_bg;
+    private javax.swing.ButtonGroup buttonGroup1;
     private javax.swing.ButtonGroup colorButtonGroup;
     private javax.swing.JPanel gamePanel;
     private javax.swing.JButton jButton1;
@@ -1389,7 +1578,6 @@ public class GUI extends javax.swing.JFrame {
     private javax.swing.JLabel jLabel19;
     private javax.swing.JLabel jLabel2;
     private javax.swing.JLabel jLabel20;
-    private javax.swing.JLabel jLabel21;
     private javax.swing.JLabel jLabel22;
     private javax.swing.JLabel jLabel23;
     private javax.swing.JLabel jLabel24;
@@ -1476,6 +1664,7 @@ public class GUI extends javax.swing.JFrame {
     private javax.swing.JLabel lbl78;
     private javax.swing.JLabel lbl79;
     private javax.swing.JLabel lbl80;
+    private javax.swing.JLabel lbl_dice;
     public static javax.swing.JLabel lbl_end_text;
     private javax.swing.JLabel lbl_esleme_araniyor;
     private javax.swing.JLabel lbl_geri_sayim;
@@ -1486,7 +1675,7 @@ public class GUI extends javax.swing.JFrame {
     private javax.swing.JPanel matchingPanel;
     private javax.swing.JFrame profileFrame;
     private javax.swing.JPanel profilePanel;
-    private javax.swing.JTextField txt_dice;
+    private javax.swing.JPanel settingsPanel;
     public static javax.swing.JTextField txt_name;
     // End of variables declaration//GEN-END:variables
 }
